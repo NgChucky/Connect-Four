@@ -11,7 +11,7 @@ from enum import Enum
 import functools
 from PySide6.QtCore import QTimer, Qt, Signal, QRect, QThread, Slot
 from PySide6.QtGui import QPainter, QColor, QPen, QFont, QBrush
-from PySide6.QtWidgets import QWidget, QApplication, QPushButton, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy, QGridLayout, QLayout
+from PySide6.QtWidgets import QWidget, QApplication, QPushButton, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy, QGridLayout, QLayout, QTextBrowser
 import numpy as np
 print(np.__version__)
 import torch
@@ -43,12 +43,12 @@ class AlphaZeroWorker(QThread):
         self.game = ConnectFour_Logic.ConnectFour()
         self.args = {
             'C': 2,
-            'num_searches': 100,
+            'num_searches': 10,
             'dirichlet_epsilon': 0.,
             'dirichlet_alpha': 0.3
         }
         self.model = AI_agent.ResNet(self.game, 9, 128, self.device)
-        self.model.load_state_dict(torch.load(r"C:\Users\Nagaraju Chukkala\Documents\Code\Python\Python_source_files\model_7_ConnectFour.pt", map_location=self.device))
+        self.model.load_state_dict(torch.load("./model_7_ConnectFour.pt", map_location=self.device))
         self.model.eval()
         self.mcts = AI_agent.MCTS(self.game, self.args, self.model)
 
@@ -131,31 +131,63 @@ class TimerWidget(QWidget):
         time_left_in_seconds = int(abs(self.max_time - self.time_elapsed)/1000)
         qp.drawText(rect, Qt.AlignCenter, f"Time Left:\n{time_left_in_seconds} seconds")
         qp.end()
-        
+
 class gameInfoWidget(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
-        self.statusMessageDict = {
-            -1: "Game Over\nYou Lost",
-            0: "Game Over\nDraw",
-            1: "Game Over\nYou Won!",
-            2: "Game in Progress",
-        }
+        self.messages = [
+            """
+            <html>
+            <body style="background-color: #141414;">
+            <div style="text-align: center;">
+                <p><span style="font-size: 48px;">🙁</span></p>
+                <p style="color:#3200fa;"><h1>You Lost!</h1></p>
+            </div>
+            </body>
+            </html>
+            """,
+            """
+            <html>
+            <body style="background-color: #141414;">
+            <div style="text-align: center;">
+                <p><span style="font-size: 48px;">🙀</span></p>
+                <p style="color:#ffffff;"><h1>phew... Draw!</h1></p>
+            </div>
+            </body>
+            </html>
+            """,
+            """
+            <html>
+            <body style="background-color: #141414;">
+            <div style="text-align: center;">
+                <p><span style="font-size: 48px;">🥳</span></p>
+                <p style="color:#32fa00;"><h1>You Won!</h1></p>
+            </div>
+            </body>
+            </html>
+            """,
+            """
+            <html>
+            <body style="background-color: #141414;">
+            <div style="text-align: center;">
+                <p><span style="font-size: 48px;">⌛</span></p>
+                <p style="color:#ffffff;"><h1>Game In Progress</h1></p>
+            </div>
+            </body>
+            </html>
+            """
+        ]
+
+        self.text_browser = QTextBrowser(self)
+        self.text_browser.setOpenExternalLinks(True)  # Enable links if needed
+        self.text_browser.setOpenExternalLinks(True)  # Enable links if needed
+        self.text_browser.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+        self.text_browser.setStyleSheet("border: none;")
+        self.show()
 
     def paintEvent(self, event):
-        qp = QPainter(self)
-        if not qp.isActive():
-            qp.begin(self)
-        pen = QPen()
-        font = QFont()
-        pen.setColor(QColor(255, 255, 255))
-        font.setPointSize(15)
-        qp.setPen(pen)
-        qp.setFont(font)
-        message = self.statusMessageDict.get(self.parent().status.value, "Unknown Status")
-        qp.drawText(self.rect(), Qt.AlignCenter, message)
-        self.show()
-        qp.end()
+        super().paintEvent(event)
+        self.text_browser.setHtml(self.messages[self.parent().status.value + 1])
 
 class Connect4Board(QWidget):
     def __init__(self, parent, cellWidth):
