@@ -1,7 +1,3 @@
-#run opponent AI and app in seperate threads . done
-#implement resizable widgets
-#allow game variations
-
 import sys
 import AI_agent
 import ConnectFour_Logic
