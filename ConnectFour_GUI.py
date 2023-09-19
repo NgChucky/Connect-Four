@@ -1,23 +1,14 @@
-import sys
 import AI_agent
 import ConnectFour_Logic
-import random
 import asyncio
 from enum import Enum
 import functools
+import numpy as np
+import torch
 from PySide6.QtCore import QTimer, Qt, Signal, QRect, QThread
 from PySide6.QtGui import QPainter, QColor, QPen, QFont, QBrush
-from PySide6.QtWidgets import QWidget, QApplication, QPushButton, QMainWindow, QSizePolicy, QTextBrowser
+from PySide6.QtWidgets import QWidget, QPushButton, QMainWindow, QSizePolicy, QTextBrowser
 import numpy as np
-print(np.__version__)
-import torch
-print(torch.__version__)
-import torch.nn as nn
-import torch.nn.functional as F
-torch.manual_seed(0)
-from tqdm.notebook import trange
-import random
-import math
 
 class CurrentPlayer(Enum):
     HUMAN = 1
@@ -335,16 +326,3 @@ class MainWindow(QMainWindow):
             self.player = CurrentPlayer.HUMAN
         else:
             self.player = CurrentPlayer.COMPUTER
-
-if __name__ == '__main__':
-    if QApplication.instance():
-        app = QApplication.instance()
-    else:
-        app = QApplication([])
-    player = CurrentPlayer.HUMAN
-    gameMainWindow = MainWindow()
-    app.exec()
-    def on_app_exit():
-        app.quit()
-        del app
-    app.aboutToQuit.connect(on_app_exit)

@@ -1,19 +1,4 @@
-import sys
-import random
-import asyncio
-from enum import Enum
-import functools
-from PySide6.QtCore import QTimer, Qt, Signal, QRect, QThread, Slot
-from PySide6.QtGui import QPainter, QColor, QPen, QFont, QBrush
-from PySide6.QtWidgets import QWidget, QApplication, QPushButton, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy, QGridLayout, QLayout
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-torch.manual_seed(0)
-from tqdm.notebook import trange
-import random
-import math
 
 class ConnectFour:
     def __init__(self):
