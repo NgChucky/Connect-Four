@@ -83,7 +83,7 @@ class gameInfoWidget(QWidget):
             <body style="background-color: #141414;">
             <div style="text-align: center;">
                 <p><span style="font-size: 72px;">🙁</span></p>
-                <p style="color:#3200fa;"><h1>You Lost!</h1></p>
+                <p style="color:#32fa00;"><h1>You Lost!</h1></p>
             </div>
             </body>
             </html>
@@ -103,7 +103,7 @@ class gameInfoWidget(QWidget):
             <body style="background-color: #141414;">
             <div style="text-align: center;">
                 <p><span style="font-size: 72px;">🥳</span></p>
-                <p style="color:#32fa00;"><h1>You Won!</h1></p>
+                <p style="color:#3200fa;"><h1>You Won!</h1></p>
             </div>
             </body>
             </html>
