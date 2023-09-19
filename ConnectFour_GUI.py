@@ -1,4 +1,3 @@
-#run opponent AI and app in seperate threads . done
 #implement resizable widgets
 #allow game variations
 
@@ -9,9 +8,9 @@ import random
 import asyncio
 from enum import Enum
 import functools
-from PySide6.QtCore import QTimer, Qt, Signal, QRect, QThread, Slot
+from PySide6.QtCore import QTimer, Qt, Signal, QRect, QThread
 from PySide6.QtGui import QPainter, QColor, QPen, QFont, QBrush
-from PySide6.QtWidgets import QWidget, QApplication, QPushButton, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy, QGridLayout, QLayout, QTextBrowser
+from PySide6.QtWidgets import QWidget, QApplication, QPushButton, QMainWindow, QSizePolicy, QTextBrowser
 import numpy as np
 print(np.__version__)
 import torch
@@ -44,37 +43,96 @@ class AlphaZeroWorker(QThread):
         self.args = {
             'C': 2,
             'num_searches': 10,
-            'dirichlet_epsilon': 0.,
+            'dirichlet_epsilon': 0.0,
             'dirichlet_alpha': 0.3
         }
         self.model = AI_agent.ResNet(self.game, 9, 128, self.device)
         self.model.load_state_dict(torch.load("./model_7_ConnectFour.pt", map_location=self.device))
         self.model.eval()
         self.mcts = AI_agent.MCTS(self.game, self.args, self.model)
-
-    def run(self):
-        asyncio.run(self.workerThread())
     
-    async def computeAIMove(self, moves, player, action):
+    def run(self):
+        asyncio.run(self.worker())
+
+    async def computeAIMove(self, moves, player):
         neutral_state = self.game.change_perspective(moves, player)
         mcts_probs = self.mcts.search(neutral_state)
         action = np.argmax(mcts_probs)
+        if moves[1, action] != 0:
+            self.mainWindow.board.button_i_status[action] = False
         moves = self.game.get_next_state(moves, action, player)
         val, is_terminal = self.game.get_value_and_terminated(moves, action)
         return_dict = {"moves": moves, "val": val, "is_terminal": is_terminal}
         return return_dict
     
-    async def workerThread(self):
+    async def worker(self):
         while True:
             await asyncio.sleep(1)
             if self.mainWindow.status == gameStatus.IN_PROGRESS and self.mainWindow.player == CurrentPlayer.COMPUTER:
                 result = await self.computeAIMove(
-                self.mainWindow.board.moves,
-                self.mainWindow.player.value,
-                self.mainWindow.playerAction
-            )
+                    self.mainWindow.board.moves,
+                    self.mainWindow.player.value
+                    )
                 self.dataToMain.emit(result)
-                
+            elif self.mainWindow.status == gameStatus.HUMAN_WON or self.mainWindow.status == gameStatus.HUMAN_LOST:
+                self.quit() 
+
+class gameInfoWidget(QWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.messages = [
+            """
+            <html>
+            <body style="background-color: #141414;">
+            <div style="text-align: center;">
+                <p><span style="font-size: 72px;">🙁</span></p>
+                <p style="color:#3200fa;"><h1>You Lost!</h1></p>
+            </div>
+            </body>
+            </html>
+            """,
+            """
+            <html>
+            <body style="background-color: #141414;">
+            <div style="text-align: center;">
+                <p><span style="font-size: 72px;">😅</span></p>
+                <p style="color:#ffffff;"><h1>phew... Draw!</h1></p>
+            </div>
+            </body>
+            </html>
+            """,
+            """
+            <html>
+            <body style="background-color: #141414;">
+            <div style="text-align: center;">
+                <p><span style="font-size: 72px;">🥳</span></p>
+                <p style="color:#32fa00;"><h1>You Won!</h1></p>
+            </div>
+            </body>
+            </html>
+            """,
+            """
+            <html>
+            <body style="background-color: #141414;">
+            <div style="text-align: center;">
+                <p><span style="font-size: 72px;">⌛</span></p>
+                <p style="color:#ffffff;"><h1>Game In Progress</h1></p>
+            </div>
+            </body>
+            </html>
+            """
+        ]
+
+        self.text_browser = QTextBrowser(self)
+        self.text_browser.setOpenExternalLinks(True)  # Enable links if needed
+        self.text_browser.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.text_browser.setStyleSheet("border: none;")
+        self.show()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        self.text_browser.setHtml(self.messages[self.parent().status.value + 1])
+        
 class TimerWidget(QWidget):
     def __init__(self, parent, cellWidth):
         super().__init__(parent)
@@ -84,13 +142,13 @@ class TimerWidget(QWidget):
         self.timer = QTimer(self)
         self.cellWidth = cellWidth
         self.time_elapsed = 0
-        self.max_time = 20000
+        self.max_time_ms = 20 * 1000
         self.timer.timeout.connect(self.updateTimer)
         self.timer.start(20)
 
     def updateTimer(self):
-        self.time_elapsed += 20
-        if self.time_elapsed >= self.max_time:
+        self.time_elapsed += int(self.max_time_ms/1000)
+        if self.time_elapsed >= self.max_time_ms:
             self.timer.stop()
             self.parent().status = gameStatus.HUMAN_LOST
             self.parent().gameOverSignal.emit()
@@ -112,7 +170,7 @@ class TimerWidget(QWidget):
         w = min(rect.width(), rect.height()) - self.cellWidth
         rect = QRect(self.cellWidth/2, self.cellWidth/2, w, w)
         start_angle = 90 * 16 
-        span_angle = abs(int((self.max_time - self.time_elapsed) / self.max_time * 360 * 16))
+        span_angle = abs(int((self.max_time_ms - self.time_elapsed) / self.max_time_ms * 360 * 16))
         pen = QPen()
         pen.setColor(QColor(255, 255, 255))
         pen.setWidth(10)
@@ -128,71 +186,15 @@ class TimerWidget(QWidget):
         font = QFont()
         font.setPointSize(14)
         qp.setFont(font)
-        time_left_in_seconds = int(abs(self.max_time - self.time_elapsed)/1000)
+        time_left_in_seconds = int(abs(self.max_time_ms - self.time_elapsed)/1000)
         qp.drawText(rect, Qt.AlignCenter, f"Time Left:\n{time_left_in_seconds} seconds")
         qp.end()
-
-class gameInfoWidget(QWidget):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.messages = [
-            """
-            <html>
-            <body style="background-color: #141414;">
-            <div style="text-align: center;">
-                <p><span style="font-size: 48px;">🙁</span></p>
-                <p style="color:#3200fa;"><h1>You Lost!</h1></p>
-            </div>
-            </body>
-            </html>
-            """,
-            """
-            <html>
-            <body style="background-color: #141414;">
-            <div style="text-align: center;">
-                <p><span style="font-size: 48px;">🙀</span></p>
-                <p style="color:#ffffff;"><h1>phew... Draw!</h1></p>
-            </div>
-            </body>
-            </html>
-            """,
-            """
-            <html>
-            <body style="background-color: #141414;">
-            <div style="text-align: center;">
-                <p><span style="font-size: 48px;">🥳</span></p>
-                <p style="color:#32fa00;"><h1>You Won!</h1></p>
-            </div>
-            </body>
-            </html>
-            """,
-            """
-            <html>
-            <body style="background-color: #141414;">
-            <div style="text-align: center;">
-                <p><span style="font-size: 48px;">⌛</span></p>
-                <p style="color:#ffffff;"><h1>Game In Progress</h1></p>
-            </div>
-            </body>
-            </html>
-            """
-        ]
-
-        self.text_browser = QTextBrowser(self)
-        self.text_browser.setOpenExternalLinks(True)  # Enable links if needed
-        self.text_browser.setOpenExternalLinks(True)  # Enable links if needed
-        self.text_browser.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
-        self.text_browser.setStyleSheet("border: none;")
-        self.show()
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        self.text_browser.setHtml(self.messages[self.parent().status.value + 1])
 
 class Connect4Board(QWidget):
     def __init__(self, parent, cellWidth):
         super().__init__(parent)
         self.cellWidth = cellWidth
+        self.c4logic = ConnectFour_Logic.ConnectFour()
         self.buttons = []
         self.button_i_status = [True for _ in range(7)]
         self.moves = np.array([[0 for _ in range(7)] for _ in range(6)])
@@ -250,19 +252,18 @@ class Connect4Board(QWidget):
                     qp.drawEllipse((j+0.6)*self.cellWidth, (i+0.6)*self.cellWidth, 0.8*self.cellWidth, 0.8*self.cellWidth)
             
     def buttonClicked(self, column):
-        self.playerAction = column
-        if self.moves[0][column] == 0:
-            for row in range(-1, -7, -1):
-                if self.moves[row][column] == 0:
-                    self.moves[row][column] = self.parent().player.value
-                    break
-            self.parent().repaint()
-            for column in range(7):
-                self.buttons[column].setEnabled(False)
-            self.parent().buttonClickedSignal.emit()
-            self.parent().switchPlayer()
-        else:
-            self.button_i_status[column] = False
+        row = np.max(np.where(self.moves[:, column] == 0))
+        if row == 0:
+            self.buttons[column].setEnabled(False)
+        self.moves[row][column] = self.parent().player.value
+        self.parent().repaint()
+        for col in range(7):
+            self.buttons[col].setEnabled(False)
+        if self.c4logic.check_win(self.moves, column):
+            self.parent().gameOverSignal.emit()
+            self.parent().status = gameStatus.HUMAN_WON
+        self.parent().switchPlayer()
+        self.parent().buttonClickedSignal.emit()
 
     def computerMove(self, data):
         self.moves = data["moves"]
@@ -273,21 +274,20 @@ class Connect4Board(QWidget):
             if val == 1:
                 print(self.parent().player, "won")
                 if self.parent().player.value == 1:
-                    self.parent().status = self.parent().status.HUMAN_WON
+                    self.parent().status = gameStatus.HUMAN_WON
                 elif self.parent().player.value == -1:
-                    self.parent().status = self.parent().status.HUMAN_LOST
+                    self.parent().status = gameStatus.HUMAN_LOST
             else:
                 self.parent().status = gameStatus.DRAW
-                print("draw")
             self.parent().gameOverSignal.emit()
             self.parent().update()
         else:
-            self.parent().update()
             self.parent().switchPlayer()
             self.parent().timerResetSignal.emit()
             for column in range(7):
                 if self.button_i_status[column]:
                     self.buttons[column].setEnabled(True)
+            self.parent().update()
 
 class MainWindow(QMainWindow):
     buttonClickedSignal = Signal()
@@ -309,8 +309,8 @@ class MainWindow(QMainWindow):
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle("Connect Four")
-        self.setFixedSize(10.5*self.cellWidth, 7.5*self.cellWidth)
+        self.setWindowTitle("Connect-Four")
+        self.setGeometry(0, 0, 10.5*self.cellWidth, 7.5*self.cellWidth)
 
         self.board.setGeometry(0, 0, 7.5*self.cellWidth, 7.5*self.cellWidth)
         self.timer.setGeometry(7.5*self.cellWidth, 0, 3*self.cellWidth, 3*self.cellWidth)
@@ -348,7 +348,6 @@ if __name__ == '__main__':
     gameMainWindow = MainWindow()
     app.exec()
     def on_app_exit():
-        gameMainWindow.alphazero.stop()
         app.quit()
         del app
     app.aboutToQuit.connect(on_app_exit)
