@@ -6,7 +6,7 @@ import functools
 import numpy as np
 import torch
 from PySide6.QtCore import QTimer, Qt, Signal, QRect, QThread
-from PySide6.QtGui import QPainter, QColor, QPen, QFont, QBrush
+from PySide6.QtGui import QPainter, QColor, QPen, QFont, QBrush, QCursor
 from PySide6.QtWidgets import QWidget, QPushButton, QMainWindow, QSizePolicy, QTextBrowser
 import numpy as np
 
@@ -30,7 +30,7 @@ class AlphaZeroWorker(QThread):
         self.game = ConnectFour_Logic.ConnectFour()
         self.args = {
             'C': 2,
-            'num_searches': 10,
+            'num_searches': 100,
             'dirichlet_epsilon': 0.0,
             'dirichlet_alpha': 0.3
         }
