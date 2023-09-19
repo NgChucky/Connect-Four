@@ -7,9 +7,7 @@ from PySide6.QtCore import QTimer, Qt, Signal, QRect, QThread, Slot
 from PySide6.QtGui import QPainter, QColor, QPen, QFont, QBrush
 from PySide6.QtWidgets import QWidget, QApplication, QPushButton, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy, QGridLayout, QLayout
 import numpy as np
-print(np.__version__)
 import torch
-print(torch.__version__)
 import torch.nn as nn
 import torch.nn.functional as F
 torch.manual_seed(0)
