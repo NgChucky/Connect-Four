@@ -12,7 +12,7 @@ if __name__ == '__main__':
     else:
         app = QApplication([])
     player = CurrentPlayer.HUMAN
-    gameMainWindow = ConnectFour_GUI.MainWindow()
+    gameMainWindow = ConnectFour_GUI.mainWindow()
     app.exec()
     def on_app_exit():
         app.quit()

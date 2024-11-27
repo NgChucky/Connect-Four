@@ -9,6 +9,7 @@ from PySide6.QtCore import QTimer, Qt, Signal, QRect, QThread
 from PySide6.QtGui import QPainter, QColor, QPen, QFont, QBrush, QCursor
 from PySide6.QtWidgets import QWidget, QPushButton, QMainWindow, QSizePolicy, QTextBrowser
 import numpy as np
+import time
 
 class CurrentPlayer(Enum):
     HUMAN = 1
@@ -20,12 +21,11 @@ class gameStatus(Enum):
     HUMAN_WON = 1
     IN_PROGRESS = 2
     
-class AlphaZeroWorker(QThread):
-    dataToMain = Signal(dict)
-
-    def __init__(self, mainWindow):
-        super().__init__()
-        self.mainWindow = mainWindow
+class AlphaZero(QThread):
+    computerMoveSignal = Signal(dict)
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.computerMoveSignal.connect(self.parent().board.computerMove)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.game = ConnectFour_Logic.ConnectFour()
         self.args = {
@@ -38,32 +38,28 @@ class AlphaZeroWorker(QThread):
         self.model.load_state_dict(torch.load("./model_7_ConnectFour.pt", map_location=self.device))
         self.model.eval()
         self.mcts = AI_agent.MCTS(self.game, self.args, self.model)
-    
-    def run(self):
-        asyncio.run(self.worker())
 
-    async def computeAIMove(self, moves, player):
-        neutral_state = self.game.change_perspective(moves, player)
+    def computeAIMove(self, moves, value):
+        neutral_state = self.game.change_perspective(moves, value)
         mcts_probs = self.mcts.search(neutral_state)
         action = np.argmax(mcts_probs)
         if moves[1, action] != 0:
-            self.mainWindow.board.button_i_status[action] = False
-        moves = self.game.get_next_state(moves, action, player)
+            self.parent().board.button_i_status[action] = False
+        moves = self.game.get_next_state(moves, action, value)
         val, is_terminal = self.game.get_value_and_terminated(moves, action)
         return_dict = {"moves": moves, "val": val, "is_terminal": is_terminal}
         return return_dict
     
-    async def worker(self):
-        while True:
-            await asyncio.sleep(1)
-            if self.mainWindow.status == gameStatus.IN_PROGRESS and self.mainWindow.player == CurrentPlayer.COMPUTER:
-                result = await self.computeAIMove(
-                    self.mainWindow.board.moves,
-                    self.mainWindow.player.value
-                    )
-                self.dataToMain.emit(result)
-            elif self.mainWindow.status == gameStatus.HUMAN_WON or self.mainWindow.status == gameStatus.HUMAN_LOST:
-                self.quit() 
+    def run(self):
+        if self.parent().status == gameStatus.IN_PROGRESS and self.parent().player == CurrentPlayer.COMPUTER:
+            result = self.computeAIMove(
+                self.parent().board.moves,
+                self.parent().player.value
+                )
+            self.computerMoveSignal.emit(result)
+
+    def startWorker(self):
+        self.start()
 
 class gameInfoWidget(QWidget):
     def __init__(self, parent):
@@ -121,32 +117,45 @@ class gameInfoWidget(QWidget):
         super().paintEvent(event)
         self.text_browser.setHtml(self.messages[self.parent().status.value + 1])
         
-class TimerWidget(QWidget):
-    def __init__(self, parent, cellWidth):
+class Timer(QThread):
+    timeElapsedSignal = Signal(int)
+
+    def __init__(self, parent):
         super().__init__(parent)
         self.parent().buttonClickedSignal.connect(self.resetTimer)
         self.parent().timerResetSignal.connect(self.resetTimer)
         self.parent().gameOverSignal.connect(self.resetTimer)
         self.timer = QTimer(self)
-        self.cellWidth = cellWidth
         self.time_elapsed = 0
-        self.max_time_ms = 20 * 1000
+        self.max_time_ms = 30 * 1000
+        self.timeElapsedSignal.connect(self.parent().timerGUI.timeElapsed)
         self.timer.timeout.connect(self.updateTimer)
         self.timer.start(20)
 
     def updateTimer(self):
-        self.time_elapsed += int(self.max_time_ms/1000)
+        self.time_elapsed += 20
         if self.time_elapsed >= self.max_time_ms:
             self.timer.stop()
             self.parent().status = gameStatus.HUMAN_LOST
             self.parent().gameOverSignal.emit()
-            self.parent().update()
-        self.update()
+        self.timeElapsedSignal.emit(self.time_elapsed)
     
     def resetTimer(self):
         self.time_elapsed = 0
         if self.parent().status != gameStatus.IN_PROGRESS:
             self.timer.stop()
+        self.timeElapsedSignal.emit(self.time_elapsed)
+
+class TimerWidget(QWidget):
+    def __init__(self, parent, cellWidth):
+        super().__init__(parent)
+        self.cellWidth = cellWidth
+        self.max_time_ms = 30 * 1000
+        self.time_elapsed = 0
+
+    def timeElapsed(self, time):
+        self.time_elapsed = time
+        self.repaint()
 
     def paintEvent(self, event):
         qp = QPainter(self)
@@ -252,6 +261,7 @@ class Connect4Board(QWidget):
             self.parent().status = gameStatus.HUMAN_WON
         self.parent().switchPlayer()
         self.parent().buttonClickedSignal.emit()
+        self.parent().alphazero.startWorker()
 
     def computerMove(self, data):
         self.moves = data["moves"]
@@ -275,9 +285,9 @@ class Connect4Board(QWidget):
             for column in range(7):
                 if self.button_i_status[column]:
                     self.buttons[column].setEnabled(True)
-            self.parent().update()
+            self.parent().repaint()
 
-class MainWindow(QMainWindow):
+class mainWindow(QMainWindow):
     buttonClickedSignal = Signal()
     timerResetSignal = Signal()
     gameOverSignal = Signal()
@@ -288,12 +298,12 @@ class MainWindow(QMainWindow):
         self.status = gameStatus.IN_PROGRESS
         self.cellWidth = 80
         self.playerAction = 0
-        self.alphazero = AlphaZeroWorker(self)
-        self.alphazero.start()
         self.board = Connect4Board(self, self.cellWidth)
-        self.timer = TimerWidget(self, self.cellWidth)
+        self.alphazero = AlphaZero(self)
+        self.timerGUI = TimerWidget(self, self.cellWidth)
+        self.timer = Timer(self)
+        self.timer.start()
         self.gameInfo = gameInfoWidget(self)
-        self.alphazero.dataToMain.connect(self.board.computerMove)
         self.initUI()
 
     def initUI(self):
@@ -301,15 +311,15 @@ class MainWindow(QMainWindow):
         self.setGeometry(0, 0, 10.5*self.cellWidth, 7.5*self.cellWidth)
 
         self.board.setGeometry(0, 0, 7.5*self.cellWidth, 7.5*self.cellWidth)
-        self.timer.setGeometry(7.5*self.cellWidth, 0, 3*self.cellWidth, 3*self.cellWidth)
+        self.timerGUI.setGeometry(7.5*self.cellWidth, 0, 3*self.cellWidth, 3*self.cellWidth)
         self.gameInfo.setGeometry(7.5*self.cellWidth, 3.5*self.cellWidth, 3*self.cellWidth, 5*self.cellWidth)
 
         self.board.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.timer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.timerGUI.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.gameInfo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.board.setMinimumSize(7.5*self.cellWidth, 7.5*self.cellWidth)
-        self.timer.setMinimumSize(3*self.cellWidth, 3*self.cellWidth)
+        self.timerGUI.setMinimumSize(3*self.cellWidth, 3*self.cellWidth)
         self.gameInfo.setMinimumSize(3*self.cellWidth, 5*self.cellWidth)
 
         self.show()
