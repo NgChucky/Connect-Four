@@ -138,12 +138,14 @@ class Timer(QThread):
             self.parent().status = gameStatus.HUMAN_LOST
             self.parent().gameOverSignal.emit()
             self.timer.quit()
+            self.quit()
         self.parent().timeElapsedSignal.emit(self.time_elapsed)
     
     def resetTimer(self):
         self.time_elapsed = 0
         if self.parent().status != gameStatus.IN_PROGRESS:
             self.timer.stop()
+            self.quit()
         self.parent().timeElapsedSignal.emit(self.time_elapsed)
 
 class TimerWidget(QWidget):
