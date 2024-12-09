@@ -10,6 +10,7 @@ from PySide6.QtGui import QPainter, QColor, QPen, QFont, QBrush, QCursor
 from PySide6.QtWidgets import QWidget, QPushButton, QMainWindow, QSizePolicy, QTextBrowser
 import numpy as np
 import time
+import random
 
 class CurrentPlayer(Enum):
     HUMAN = 1
@@ -22,10 +23,9 @@ class gameStatus(Enum):
     IN_PROGRESS = 2
     
 class AlphaZero(QThread):
-    computerMoveSignal = Signal(dict)
     def __init__(self, parent):
         super().__init__(parent)
-        self.computerMoveSignal.connect(self.parent().board.computerMove)
+        self.parent().computerMoveSignal.connect(self.parent().board.computerMove)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.game = ConnectFour_Logic.ConnectFour()
         self.args = {
@@ -56,7 +56,8 @@ class AlphaZero(QThread):
                 self.parent().board.moves,
                 self.parent().player.value
                 )
-            self.computerMoveSignal.emit(result)
+            self.parent().computerMoveSignal.emit(result)
+        self.quit()
 
     def startWorker(self):
         self.start()
@@ -67,17 +68,17 @@ class gameInfoWidget(QWidget):
         self.messages = [
             """
             <html>
-            <body style="background-color: #141414;">
+            <body style="background-color: #000000;">
             <div style="text-align: center;">
                 <p><span style="font-size: 72px;">🙁</span></p>
-                <p style="color:#32fa00;"><h1>You Lost!</h1></p>
+                <p style="color:#00ff00;"><h1>You Lost!</h1></p>
             </div>
             </body>
             </html>
             """,
             """
             <html>
-            <body style="background-color: #141414;">
+            <body style="background-color: #000000;">
             <div style="text-align: center;">
                 <p><span style="font-size: 72px;">😅</span></p>
                 <p style="color:#ffffff;"><h1>phew... Draw!</h1></p>
@@ -87,17 +88,17 @@ class gameInfoWidget(QWidget):
             """,
             """
             <html>
-            <body style="background-color: #141414;">
+            <body style="background-color: #000000;">
             <div style="text-align: center;">
                 <p><span style="font-size: 72px;">🥳</span></p>
-                <p style="color:#3200fa;"><h1>You Won!</h1></p>
+                <p style="color:#0000ff;"><h1>You Won!</h1></p>
             </div>
             </body>
             </html>
             """,
             """
             <html>
-            <body style="background-color: #141414;">
+            <body style="background-color: #000000;">
             <div style="text-align: center;">
                 <p><span style="font-size: 72px;">⌛</span></p>
                 <p style="color:#ffffff;"><h1>Game In Progress</h1></p>
@@ -118,8 +119,6 @@ class gameInfoWidget(QWidget):
         self.text_browser.setHtml(self.messages[self.parent().status.value + 1])
         
 class Timer(QThread):
-    timeElapsedSignal = Signal(int)
-
     def __init__(self, parent):
         super().__init__(parent)
         self.parent().buttonClickedSignal.connect(self.resetTimer)
@@ -128,7 +127,7 @@ class Timer(QThread):
         self.timer = QTimer(self)
         self.time_elapsed = 0
         self.max_time_ms = 30 * 1000
-        self.timeElapsedSignal.connect(self.parent().timerGUI.timeElapsed)
+        self.parent().timeElapsedSignal.connect(self.parent().timerGUI.timeElapsed)
         self.timer.timeout.connect(self.updateTimer)
         self.timer.start(20)
 
@@ -138,13 +137,14 @@ class Timer(QThread):
             self.timer.stop()
             self.parent().status = gameStatus.HUMAN_LOST
             self.parent().gameOverSignal.emit()
-        self.timeElapsedSignal.emit(self.time_elapsed)
+            self.timer.quit()
+        self.parent().timeElapsedSignal.emit(self.time_elapsed)
     
     def resetTimer(self):
         self.time_elapsed = 0
         if self.parent().status != gameStatus.IN_PROGRESS:
             self.timer.stop()
-        self.timeElapsedSignal.emit(self.time_elapsed)
+        self.parent().timeElapsedSignal.emit(self.time_elapsed)
 
 class TimerWidget(QWidget):
     def __init__(self, parent, cellWidth):
@@ -162,7 +162,7 @@ class TimerWidget(QWidget):
         if not qp.isActive():
             qp.begin(self)
         qp.setRenderHint(QPainter.Antialiasing)
-        qp.fillRect(self.rect(), QBrush(QColor(20, 20, 20)))
+        qp.fillRect(self.rect(), QBrush(QColor(0, 0, 0)))
         rect = self.rect()
         w = min(rect.width(), rect.height()) - self.cellWidth
         rect = QRect(self.cellWidth/2, self.cellWidth/2, w, w)
@@ -174,9 +174,9 @@ class TimerWidget(QWidget):
         qp.setPen(pen)
         qp.drawEllipse(rect)
         if self.parent().player == CurrentPlayer.COMPUTER:
-            pen.setColor(QColor(50, 255, 0))
+            pen.setColor(QColor(0, 255, 0))
         else:
-            pen.setColor(QColor(50, 0, 255))
+            pen.setColor(QColor(0, 0, 255))
         pen.setWidth(11)
         qp.setPen(pen)
         qp.drawArc(rect, start_angle, span_angle)
@@ -226,7 +226,7 @@ class Connect4Board(QWidget):
         qp.end()
 
     def drawBackground(self, qp):
-        qp.fillRect(self.rect(), QBrush(QColor(20, 20, 20)))
+        qp.fillRect(self.rect(), QBrush(QColor(0, 0, 0)))
         
     def drawGrid(self, qp):
         qp.setPen(Qt.white)
@@ -241,11 +241,11 @@ class Connect4Board(QWidget):
             for j in range(0, 7):
                 if self.moves[i][j]:
                     if self.moves[i][j] == CurrentPlayer.COMPUTER.value:
-                        qp.setPen(QColor(50, 255, 0))
-                        qp.setBrush(QColor(50, 255, 0))
+                        qp.setPen(QColor(0, 255, 0))
+                        qp.setBrush(QColor(0, 255, 0))
                     else:
-                        qp.setPen(QColor(50, 0, 255))
-                        qp.setBrush(QColor(50, 0, 255))
+                        qp.setPen(QColor(0, 0, 255))
+                        qp.setBrush(QColor(0, 0, 255))
                     qp.drawEllipse((j+0.6)*self.cellWidth, (i+0.6)*self.cellWidth, 0.8*self.cellWidth, 0.8*self.cellWidth)
             
     def buttonClicked(self, column):
@@ -259,9 +259,9 @@ class Connect4Board(QWidget):
         if self.c4logic.check_win(self.moves, column):
             self.parent().gameOverSignal.emit()
             self.parent().status = gameStatus.HUMAN_WON
-        self.parent().switchPlayer()
         self.parent().buttonClickedSignal.emit()
         self.parent().alphazero.startWorker()
+        self.parent().switchPlayer()
 
     def computerMove(self, data):
         self.moves = data["moves"]
@@ -291,15 +291,19 @@ class mainWindow(QMainWindow):
     buttonClickedSignal = Signal()
     timerResetSignal = Signal()
     gameOverSignal = Signal()
+    computerMoveSignal = Signal(dict)
+    timeElapsedSignal = Signal(int)
+
     
     def __init__(self):
         super().__init__()
-        self.player = CurrentPlayer.HUMAN
+        self.player = CurrentPlayer(self.choosePlayer())
         self.status = gameStatus.IN_PROGRESS
         self.cellWidth = 80
         self.playerAction = 0
         self.board = Connect4Board(self, self.cellWidth)
         self.alphazero = AlphaZero(self)
+        self.alphazero.start()
         self.timerGUI = TimerWidget(self, self.cellWidth)
         self.timer = Timer(self)
         self.timer.start()
@@ -328,8 +332,13 @@ class mainWindow(QMainWindow):
         qp = QPainter(self)
         if not qp.isActive():
             qp.begin(self)
-        qp.fillRect(self.rect(), QBrush(QColor(20, 20, 20)))
+        qp.fillRect(self.rect(), QBrush(QColor(0, 0, 0)))
         qp.end()
+
+    def choosePlayer(self):
+        random.seed(time.time())
+        r = random.choice([1,-1])
+        return r
 
     def switchPlayer(self):
         if self.player == CurrentPlayer.COMPUTER:
