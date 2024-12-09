@@ -210,6 +210,8 @@ class Connect4Board(QWidget):
             self.buttons[column].setFont(font)
             self.buttons[column].setGeometry((column+0.75)*self.cellWidth, 6.75*self.cellWidth, self.cellWidth/2, self.cellWidth/2)
             self.buttons[column].clicked.connect(functools.partial(self.buttonClicked, column))
+        if self.parent().player == CurrentPlayer.COMPUTER:
+            self.disableButtons()
 
     def disableButtons(self):
         for column in range(0, 7):
